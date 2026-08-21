@@ -1,0 +1,1148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>财政支出汇总计算</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #627080;
+      --line: #d8e0e8;
+      --accent: #176b87;
+      --accent-strong: #0e536b;
+      --soft: #edf6f8;
+      --ok-bg: #e8f6ee;
+      --ok: #1f7a4d;
+      --warn-bg: #fff5df;
+      --warn: #8a5a13;
+      --bad-bg: #faeeee;
+      --bad: #a13b3b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      min-height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1, h2, h3 { margin: 0; letter-spacing: 0; }
+    h1 { font-size: 20px; font-weight: 700; }
+    h2 { font-size: 16px; margin-bottom: 12px; }
+    h3 { font-size: 14px; margin: 14px 0 6px; }
+
+    main { padding: 22px 0 40px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .drop {
+      border: 1px dashed #95a6b6;
+      border-radius: 8px;
+      background: #fbfcfd;
+      min-height: 154px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 18px;
+    }
+
+    .drop.dragover {
+      border-color: var(--accent);
+      background: var(--soft);
+    }
+
+    input[type=file] {
+      display: block;
+      width: min(560px, 100%);
+      margin: 0 auto;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+    }
+
+    button, .button {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      border-radius: 6px;
+      min-height: 38px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 650;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button:hover, .button:hover { background: var(--accent-strong); }
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    .secondary {
+      background: #fff;
+      color: var(--accent);
+    }
+
+    .secondary:hover { background: var(--soft); }
+
+    .hint, .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #415161;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .status.ok { background: var(--ok-bg); color: var(--ok); }
+    .status.warn { background: var(--warn-bg); color: var(--warn); }
+    .status.bad { background: var(--bad-bg); color: var(--bad); }
+
+    .files {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .file {
+      border: 1px solid var(--line);
+      background: #fbfcfd;
+      border-radius: 6px;
+      padding: 7px 9px;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    ul { margin: 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: .92em;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 580px;
+      overflow: auto;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .full-output {
+      background: #101820;
+      color: #edf5f8;
+      border-color: #101820;
+    }
+
+    .hidden { display: none; }
+
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap topbar">
+      <h1>财政支出汇总计算</h1>
+      <span class="status">静态网页版</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="grid">
+      <section class="panel">
+        <h2>上传 Excel 并生成结果</h2>
+        <div id="drop" class="drop">
+          <div>
+            <input id="fileInput" type="file" multiple accept=".xlsx">
+            <p class="hint">可一次选择所有 Excel 文件；所有计算都在浏览器本地完成。</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="calcBtn" type="button">开始计算</button>
+          <button id="clearBtn" class="secondary" type="button">清空文件</button>
+          <span id="state" class="status">等待上传</span>
+        </div>
+        <div id="uploadedFiles" class="files"></div>
+      </section>
+
+      <aside class="panel">
+        <h2>建议上传清单</h2>
+        <h3>支出情况</h3>
+        <ul>
+          <li><code>支出情况-三保-已支付.xlsx</code></li>
+          <li><code>支出情况-三保-昨天已审未支付.xlsx</code></li>
+          <li><code>支出情况-三保-已审未支付.xlsx</code></li>
+          <li><code>支出情况-上年结转上级资金-已支付.xlsx</code></li>
+          <li><code>支出情况-上年结转上级资金-昨天已审未支付.xlsx</code></li>
+          <li><code>支出情况-上年结转上级资金-已审未支付.xlsx</code></li>
+          <li><code>支出情况-当年度上级资金-已支付.xlsx</code></li>
+          <li><code>支出情况-当年度上级资金-昨天已审未支付.xlsx</code></li>
+          <li><code>支出情况-当年度上级资金-已审未支付.xlsx</code></li>
+          <li><code>支出情况-市级和债券-已支付.xlsx</code></li>
+          <li><code>支出情况-市级和债券-昨天已审未支付.xlsx</code></li>
+          <li><code>支出情况-市级和债券-已审未支付.xlsx</code></li>
+        </ul>
+        <h3>待拨付情况</h3>
+        <ul>
+          <li><code>待拨付情况-三保.xlsx</code></li>
+          <li><code>待拨付情况-上年结转上级资金.xlsx</code></li>
+          <li><code>待拨付情况-当年度上级资金.xlsx</code></li>
+          <li><code>待拨付情况-市级和债券.xlsx</code></li>
+        </ul>
+        <h3>实拨文件</h3>
+        <ul>
+          <li><code>实拨待审*.xlsx</code></li>
+          <li><code>实拨已审*.xlsx</code></li>
+          <li><code>实拨已付*.xlsx</code></li>
+        </ul>
+      </aside>
+    </div>
+
+    <section class="panel" style="margin-top:18px">
+      <h2>推荐的明日文件准备方式</h2>
+      <p>计算完成后下载 <strong>明日延续包.zip</strong>。压缩包会把当天上传的四个“已审未支付”文件自动改名为明天要用的“昨天已审未支付”文件。</p>
+      <p class="hint">第二天解压后，只需要补充当天新导出的“已支付”“已审未支付”“待拨付情况”“实拨待审/已审/已付”文件即可。</p>
+    </section>
+
+    <section id="resultPanel" class="panel hidden" style="margin-top:18px">
+      <h2>总结输出</h2>
+      <div class="actions">
+        <button id="copySummaryBtn" type="button">复制总结</button>
+        <button id="downloadSummaryBtn" class="secondary" type="button">下载总结输出.txt</button>
+        <button id="downloadOutputBtn" class="secondary" type="button">下载输出结果.txt</button>
+        <button id="downloadZipBtn" class="secondary" type="button">下载明日延续包.zip</button>
+      </div>
+      <pre id="summaryText"></pre>
+    </section>
+
+    <section id="detailPanel" class="panel hidden" style="margin-top:18px">
+      <h2>完整输出</h2>
+      <pre id="outputText" class="full-output"></pre>
+    </section>
+  </main>
+
+  <script>
+    const UNIT = 10000;
+    const MUNICIPAL_NATURES = ["111-一般公共预算资金", "121-政府性基金预算资金"];
+    const STANDARD_COLUMNS = ["状态", "申请金额", "实际支付金额", "预算项目", "资金性质", "部门支出经济分类", "拨款金额", "预算管理级次", "项目名称"];
+    const REQUIRED_FILES = [
+      "支出情况-三保-已支付.xlsx",
+      "支出情况-三保-昨天已审未支付.xlsx",
+      "支出情况-三保-已审未支付.xlsx",
+      "支出情况-上年结转上级资金-已支付.xlsx",
+      "支出情况-上年结转上级资金-昨天已审未支付.xlsx",
+      "支出情况-上年结转上级资金-已审未支付.xlsx",
+      "支出情况-当年度上级资金-已支付.xlsx",
+      "支出情况-当年度上级资金-昨天已审未支付.xlsx",
+      "支出情况-当年度上级资金-已审未支付.xlsx",
+      "支出情况-市级和债券-已支付.xlsx",
+      "支出情况-市级和债券-昨天已审未支付.xlsx",
+      "支出情况-市级和债券-已审未支付.xlsx",
+      "待拨付情况-三保.xlsx",
+      "待拨付情况-上年结转上级资金.xlsx",
+      "待拨付情况-当年度上级资金.xlsx",
+      "待拨付情况-市级和债券.xlsx",
+      "实拨待审*.xlsx",
+      "实拨已审*.xlsx",
+      "实拨已付*.xlsx"
+    ];
+    const NEXT_DAY_RENAME_MAP = {
+      "支出情况-当年度上级资金-已审未支付.xlsx": "支出情况-当年度上级资金-昨天已审未支付.xlsx",
+      "支出情况-上年结转上级资金-已审未支付.xlsx": "支出情况-上年结转上级资金-昨天已审未支付.xlsx",
+      "支出情况-三保-已审未支付.xlsx": "支出情况-三保-昨天已审未支付.xlsx",
+      "支出情况-市级和债券-已审未支付.xlsx": "支出情况-市级和债券-昨天已审未支付.xlsx"
+    };
+
+    const fileInput = document.getElementById("fileInput");
+    const drop = document.getElementById("drop");
+    const calcBtn = document.getElementById("calcBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const state = document.getElementById("state");
+    const uploadedFiles = document.getElementById("uploadedFiles");
+    const resultPanel = document.getElementById("resultPanel");
+    const detailPanel = document.getElementById("detailPanel");
+    const summaryText = document.getElementById("summaryText");
+    const outputText = document.getElementById("outputText");
+    const copySummaryBtn = document.getElementById("copySummaryBtn");
+    const downloadSummaryBtn = document.getElementById("downloadSummaryBtn");
+    const downloadOutputBtn = document.getElementById("downloadOutputBtn");
+    const downloadZipBtn = document.getElementById("downloadZipBtn");
+
+    let selectedFiles = new Map();
+    let workbookCache = new Map();
+    let latestSummary = "";
+    let latestOutput = "";
+
+    function setState(text, type = "") {
+      state.textContent = text;
+      state.className = `status ${type}`.trim();
+    }
+
+    function safeName(name) {
+      return String(name || "").replace(/\\/g, "/").split("/").pop();
+    }
+
+    function addFiles(files) {
+      for (const file of files) {
+        const name = safeName(file.name);
+        if (name.toLowerCase().endsWith(".xlsx")) selectedFiles.set(name, file);
+      }
+      workbookCache.clear();
+      renderFileList();
+      setState(selectedFiles.size ? `已选择 ${selectedFiles.size} 个文件` : "等待上传");
+    }
+
+    function renderFileList() {
+      uploadedFiles.innerHTML = "";
+      for (const name of [...selectedFiles.keys()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))) {
+        const div = document.createElement("div");
+        div.className = "file";
+        div.textContent = name;
+        uploadedFiles.appendChild(div);
+      }
+    }
+
+    function toAmount(value) {
+      if (value === null || value === undefined || value === "") return 0;
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      const text = String(value).replace(/,/g, "").trim();
+      const num = Number(text);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function isNumericCell(value) {
+      if (value === null || value === undefined || value === "") return false;
+      if (typeof value === "number") return Number.isFinite(value);
+      const text = String(value).replace(/,/g, "").trim();
+      return text !== "" && Number.isFinite(Number(text));
+    }
+
+    function roundWan(yuan) {
+      const value = Number(yuan || 0) / UNIT;
+      return value >= 0 ? Math.floor(value + 0.5) : Math.ceil(value - 0.5);
+    }
+
+    function emptyFrame(columns = STANDARD_COLUMNS) {
+      const rows = [];
+      rows.columns = columns;
+      return rows;
+    }
+
+    async function workbookFor(name) {
+      if (!selectedFiles.has(name)) return null;
+      if (workbookCache.has(name)) return workbookCache.get(name);
+      const buffer = await selectedFiles.get(name).arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+      workbookCache.set(name, workbook);
+      return workbook;
+    }
+
+    async function readExcelAutoHeader(name, requiredCols) {
+      const workbook = await workbookFor(name);
+      if (!workbook) return emptyFrame(requiredCols);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+      let headerIdx = -1;
+      for (let i = 0; i < raw.length; i++) {
+        const values = new Set(raw[i].filter(v => v !== null && v !== undefined).map(v => String(v).trim()));
+        if (requiredCols.every(col => values.has(col))) {
+          headerIdx = i;
+          break;
+        }
+      }
+      if (headerIdx < 0) return emptyFrame(requiredCols);
+
+      const columns = raw[headerIdx].map(v => v === null || v === undefined ? "" : String(v).trim());
+      const amountCols = ["申请金额", "实际支付金额", "拨款金额"].filter(c => columns.includes(c));
+      const rows = [];
+      rows.columns = columns.filter(Boolean);
+
+      for (let r = headerIdx + 1; r < raw.length; r++) {
+        const obj = {};
+        for (let c = 0; c < columns.length; c++) {
+          if (columns[c]) obj[columns[c]] = raw[r][c];
+        }
+        if ("状态" in obj) {
+          const status = obj["状态"];
+          if (status === null || status === undefined || String(status).trim() === "") continue;
+        }
+        if (amountCols.length) {
+          const hasAmount = amountCols.some(col => isNumericCell(obj[col]));
+          if (!hasAmount) continue;
+        }
+        rows.push(obj);
+      }
+      rows.columns = columns.filter(Boolean);
+      return rows;
+    }
+
+    async function load(name) {
+      return readExcelAutoHeader(name, ["状态"]);
+    }
+
+    function findTransferFile(prefix) {
+      return [...selectedFiles.keys()]
+        .filter(name => name.startsWith(prefix) && name.toLowerCase().endsWith(".xlsx"))
+        .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))[0] || null;
+    }
+
+    async function loadTransfer(prefix) {
+      const name = findTransferFile(prefix);
+      if (!name) return emptyFrame(["状态", "拨款金额", "资金性质", "预算管理级次", "项目名称"]);
+      const df = await readExcelAutoHeader(name, ["状态", "拨款金额"]);
+      const rows = df.filter(row => toAmount(row["拨款金额"]) > 0);
+      rows.columns = df.columns || [];
+      return rows;
+    }
+
+    async function transferPendingByLevel(level) {
+      const df = await loadTransfer("实拨待审");
+      return df.filter(row => row["预算管理级次"] === level);
+    }
+
+    async function transferApprovedByLevel(level) {
+      const df = await loadTransfer("实拨已审");
+      return df.filter(row => row["预算管理级次"] === level);
+    }
+
+    async function transferPaidByLevel(level) {
+      const df = await loadTransfer("实拨已付");
+      return df.filter(row => row["预算管理级次"] === level);
+    }
+
+    async function transferSpentByLevel(level) {
+      return [
+        ...(await transferApprovedByLevel(level)),
+        ...(await transferPaidByLevel(level))
+      ];
+    }
+
+    function reportDateStr() {
+      for (const prefix of ["实拨待审", "实拨已审", "实拨已付"]) {
+        const name = findTransferFile(prefix);
+        if (!name) continue;
+        const match = name.match(/(\d{1,2})\.(\d{1,2})/);
+        if (match) return `${Number(match[1])}月${Number(match[2])}日`;
+      }
+      const now = new Date();
+      return `${now.getMonth() + 1}月${now.getDate()}日`;
+    }
+
+    function sumYuan(df, col) {
+      if (!df || !df.length) return 0;
+      return df.reduce((sum, row) => sum + toAmount(row[col]), 0);
+    }
+
+    function sumRound(df, col) {
+      return roundWan(sumYuan(df, col));
+    }
+
+    function groupSumYuan(df, groupCol, sumCol) {
+      const result = new Map();
+      if (!df || !df.length) return result;
+      for (const row of df) {
+        if (!(groupCol in row) || !(sumCol in row)) continue;
+        const key = row[groupCol];
+        if (key === null || key === undefined || String(key).trim() === "") continue;
+        result.set(String(key), (result.get(String(key)) || 0) + toAmount(row[sumCol]));
+      }
+      return result;
+    }
+
+    function addMaps(...maps) {
+      const result = new Map();
+      for (const map of maps) {
+        for (const [key, value] of map.entries()) {
+          result.set(key, (result.get(key) || 0) + value);
+        }
+      }
+      return result;
+    }
+
+    function subtractMaps(left, right) {
+      const result = new Map(left);
+      for (const [key, value] of right.entries()) {
+        result.set(key, (result.get(key) || 0) - value);
+      }
+      return result;
+    }
+
+    function projectDictFromYuan(series) {
+      if (!series || !series.size) return {};
+      const rounded = [...series.entries()].map(([key, value]) => [key, roundWan(value)]);
+      for (const threshold of [20, 10, 5]) {
+        const filtered = rounded.filter(([, value]) => value >= threshold);
+        if (filtered.length) return Object.fromEntries(filtered);
+      }
+      return {};
+    }
+
+    function normalizeVoucher(value) {
+      if (value === null || value === undefined || value === "") return "";
+      let text = String(value).trim();
+      if (text.endsWith(".0")) text = text.slice(0, -2);
+      return text;
+    }
+
+    function voucherSet(df) {
+      const result = new Set();
+      if (!df || !df.length) return result;
+      for (const row of df) {
+        if (!("支付凭证号" in row)) continue;
+        const value = normalizeVoucher(row["支付凭证号"]);
+        if (value) result.add(value);
+      }
+      return result;
+    }
+
+    function removeOverlappingVoucherRows(yestDf, paidDf, pendDf) {
+      if (!yestDf || !yestDf.length || !yestDf.some(row => "支付凭证号" in row)) {
+        return [paidDf, yestDf, pendDf];
+      }
+      const yestSet = voucherSet(yestDf);
+      const paidOrPend = new Set([...voucherSet(paidDf), ...voucherSet(pendDf)]);
+      const duplicates = new Set([...yestSet].filter(value => paidOrPend.has(value)));
+      if (!duplicates.size) return [paidDf, yestDf, pendDf];
+
+      const removeFrom = df => {
+        if (!df || !df.length || !df.some(row => "支付凭证号" in row)) return df;
+        return df.filter(row => {
+          const value = normalizeVoucher(row["支付凭证号"]);
+          return !value || !duplicates.has(value);
+        });
+      };
+      return [removeFrom(paidDf), removeFrom(yestDf), removeFrom(pendDf)];
+    }
+
+    function calculateTotalYuanWithAdjustment(paidDf, yestDf, pendDf, paidCol, pendingCol) {
+      const paid = groupSumYuan(paidDf, "预算项目", paidCol);
+      const yest = groupSumYuan(yestDf, "预算项目", pendingCol);
+      const pend = groupSumYuan(pendDf, "预算项目", pendingCol);
+      const keys = new Set([...paid.keys(), ...yest.keys(), ...pend.keys()]);
+      let baseTotal = 0;
+      let adjustment = 0;
+      for (const key of keys) {
+        const paidValue = paid.get(key) || 0;
+        const yestValue = yest.get(key) || 0;
+        const pendValue = pend.get(key) || 0;
+        baseTotal += paidValue - yestValue + pendValue;
+        adjustment += Math.max(yestValue - paidValue, 0);
+      }
+      return baseTotal + adjustment;
+    }
+
+    async function calcSanbaoExpense() {
+      const paid = await load("支出情况-三保-已支付.xlsx");
+      const yest = await load("支出情况-三保-昨天已审未支付.xlsx");
+      const pend = await load("支出情况-三保-已审未支付.xlsx");
+      return sumRound(paid, "实际支付金额") - sumRound(yest, "申请金额") + sumRound(pend, "申请金额");
+    }
+
+    async function threeExpenseFrames(baseName) {
+      const paid = await load(`支出情况-${baseName}-已支付.xlsx`);
+      const yest = await load(`支出情况-${baseName}-昨天已审未支付.xlsx`);
+      const pend = await load(`支出情况-${baseName}-已审未支付.xlsx`);
+      return removeOverlappingVoucherRows(yest, paid, pend);
+    }
+
+    async function lastYearCarryTotal() {
+      const [paid, yest, pend] = await threeExpenseFrames("上年结转上级资金");
+      const total = calculateTotalYuanWithAdjustment(paid, yest, pend, "实际支付金额", "申请金额")
+        + sumYuan(await transferSpentByLevel("上年结转上级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function lastYearCarryExpense() {
+      const [paidDf, yestDf, pendDf] = await threeExpenseFrames("上年结转上级资金");
+      const paid = groupSumYuan(paidDf, "预算项目", "实际支付金额");
+      const yest = groupSumYuan(yestDf, "预算项目", "申请金额");
+      const pend = groupSumYuan(pendDf, "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferSpentByLevel("上年结转上级"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(subtractMaps(paid, yest), pend, transfer));
+    }
+
+    async function currentYearUpperTotal() {
+      const [paid, yest, pend] = await threeExpenseFrames("当年度上级资金");
+      const total = calculateTotalYuanWithAdjustment(paid, yest, pend, "实际支付金额", "申请金额")
+        + sumYuan(await transferSpentByLevel("本年度上级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function currentYearUpperExpense() {
+      const [paidDf, yestDf, pendDf] = await threeExpenseFrames("当年度上级资金");
+      const paid = groupSumYuan(paidDf, "预算项目", "实际支付金额");
+      const yest = groupSumYuan(yestDf, "预算项目", "申请金额");
+      const pend = groupSumYuan(pendDf, "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferSpentByLevel("本年度上级"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(subtractMaps(paid, yest), pend, transfer));
+    }
+
+    async function expenseFramesByNature(natures) {
+      let paid = await load("支出情况-市级和债券-已支付.xlsx");
+      let yest = await load("支出情况-市级和债券-昨天已审未支付.xlsx");
+      let pend = await load("支出情况-市级和债券-已审未支付.xlsx");
+      const filter = df => df.filter(row => !("资金性质" in row) || natures.includes(row["资金性质"]));
+      paid = filter(paid);
+      yest = filter(yest);
+      pend = filter(pend);
+      return removeOverlappingVoucherRows(yest, paid, pend);
+    }
+
+    async function municipalTotal() {
+      const [paid, yest, pend] = await expenseFramesByNature(MUNICIPAL_NATURES);
+      const total = calculateTotalYuanWithAdjustment(paid, yest, pend, "实际支付金额", "申请金额")
+        + sumYuan(await transferSpentByLevel("市级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function municipalExpense() {
+      const [paidDf, yestDf, pendDf] = await expenseFramesByNature(MUNICIPAL_NATURES);
+      const paid = groupSumYuan(paidDf, "预算项目", "实际支付金额");
+      const yest = groupSumYuan(yestDf, "预算项目", "申请金额");
+      const pend = groupSumYuan(pendDf, "预算项目", "申请金额");
+      const base = projectDictFromYuan(addMaps(subtractMaps(paid, yest), pend));
+      const transfer = projectDictFromYuan(groupSumYuan(await transferSpentByLevel("市级"), "项目名称", "拨款金额"));
+      return { ...base, ...transfer };
+    }
+
+    async function generalBondTotal() {
+      const [paid, yest, pend] = await expenseFramesByNature(["112-一般债券"]);
+      const total = calculateTotalYuanWithAdjustment(paid, yest, pend, "实际支付金额", "申请金额")
+        + sumYuan(await transferSpentByLevel("一般债券"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function generalBondExpense() {
+      const [paidDf, yestDf, pendDf] = await expenseFramesByNature(["112-一般债券"]);
+      const paid = groupSumYuan(paidDf, "预算项目", "实际支付金额");
+      const yest = groupSumYuan(yestDf, "预算项目", "申请金额");
+      const pend = groupSumYuan(pendDf, "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferSpentByLevel("一般债券"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(subtractMaps(paid, yest), pend, transfer));
+    }
+
+    async function specialBondTotal() {
+      const [paid, yest, pend] = await expenseFramesByNature(["122-专项债券"]);
+      const total = calculateTotalYuanWithAdjustment(paid, yest, pend, "实际支付金额", "申请金额")
+        + sumYuan(await transferSpentByLevel("专项债券"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function specialBondExpense() {
+      const [paidDf, yestDf, pendDf] = await expenseFramesByNature(["122-专项债券"]);
+      const paid = groupSumYuan(paidDf, "预算项目", "实际支付金额");
+      const yest = groupSumYuan(yestDf, "预算项目", "申请金额");
+      const pend = groupSumYuan(pendDf, "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferSpentByLevel("专项债券"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(subtractMaps(paid, yest), pend, transfer));
+    }
+
+    async function pendingTotal() {
+      const files = ["待拨付情况-三保.xlsx", "待拨付情况-上年结转上级资金.xlsx", "待拨付情况-当年度上级资金.xlsx", "待拨付情况-市级和债券.xlsx"];
+      let total = 0;
+      for (const name of files) total += sumYuan(await load(name), "申请金额");
+      total += sumYuan(await loadTransfer("实拨待审"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingSanbao() {
+      const total = sumYuan(await load("待拨付情况-三保.xlsx"), "申请金额")
+        + sumYuan(await transferPendingByLevel("三保"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingUpper() {
+      const total = sumYuan(await load("待拨付情况-上年结转上级资金.xlsx"), "申请金额")
+        + sumYuan(await load("待拨付情况-当年度上级资金.xlsx"), "申请金额")
+        + sumYuan(await transferPendingByLevel("上年结转上级"), "拨款金额")
+        + sumYuan(await transferPendingByLevel("本年度上级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingLastYearTotal() {
+      const total = sumYuan(await load("待拨付情况-上年结转上级资金.xlsx"), "申请金额")
+        + sumYuan(await transferPendingByLevel("上年结转上级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingLastYearCarry() {
+      const base = groupSumYuan(await load("待拨付情况-上年结转上级资金.xlsx"), "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferPendingByLevel("上年结转上级"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(base, transfer));
+    }
+
+    async function pendingCurrentUpperTotal() {
+      const total = sumYuan(await load("待拨付情况-当年度上级资金.xlsx"), "申请金额")
+        + sumYuan(await transferPendingByLevel("本年度上级"), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingCurrentUpper() {
+      const base = groupSumYuan(await load("待拨付情况-当年度上级资金.xlsx"), "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferPendingByLevel("本年度上级"), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(base, transfer));
+    }
+
+    async function pendingBondTotal(level, nature) {
+      const df = await load("待拨付情况-市级和债券.xlsx");
+      const base = df.filter(row => !("资金性质" in row) || row["资金性质"] === nature);
+      const total = sumYuan(base, "申请金额") + sumYuan(await transferPendingByLevel(level), "拨款金额");
+      return roundWan(total);
+    }
+
+    async function pendingBond(level, nature) {
+      const df = await load("待拨付情况-市级和债券.xlsx");
+      const baseDf = df.filter(row => !("资金性质" in row) || row["资金性质"] === nature);
+      const base = groupSumYuan(baseDf, "预算项目", "申请金额");
+      const transfer = groupSumYuan(await transferPendingByLevel(level), "项目名称", "拨款金额");
+      return projectDictFromYuan(addMaps(base, transfer));
+    }
+
+    async function pendingMunicipalBreakdown() {
+      const df = await load("待拨付情况-市级和债券.xlsx");
+      if (!df.length || !df.some(row => "资金性质" in row)) return {};
+      const dfMunicipal = df.filter(row => MUNICIPAL_NATURES.includes(row["资金性质"]));
+      const pickContain = keywords => {
+        if (!dfMunicipal.length || !dfMunicipal.some(row => "部门支出经济分类" in row)) return 0;
+        return roundWan(sumYuan(dfMunicipal.filter(row => keywords.some(kw => String(row["部门支出经济分类"] ?? "").includes(kw))), "申请金额"));
+      };
+      const excludeCodes = ["301", "303", "委托业务费", "专用设备购置", "办公设备购置", "基础设施建设", "大型修缮", "信息网络及软件购置更新", "安置补助", "地上附着物和青苗补偿", "拆迁补偿", "其他资本性支出"];
+      const operationRows = dfMunicipal.filter(row => {
+        const text = String(row["部门支出经济分类"] ?? "").trim();
+        return text !== "" && !excludeCodes.some(code => text.includes(code));
+      });
+      return {
+        "总额": roundWan(sumYuan(dfMunicipal, "申请金额")),
+        "一般公共": roundWan(sumYuan(df.filter(row => row["资金性质"] === "111-一般公共预算资金"), "申请金额")),
+        "政府性基金": roundWan(sumYuan(df.filter(row => row["资金性质"] === "121-政府性基金预算资金"), "申请金额")),
+        "人员类": pickContain(["301", "303"]),
+        "运转类": roundWan(sumYuan(operationRows, "申请金额")),
+        "委托及采购": pickContain(["委托业务费", "专用设备购置", "办公设备购置", "信息网络及软件购置更新"]),
+        "基建类": pickContain(["基础设施建设", "大型修缮", "其他资本性支出"]),
+        "征地类": pickContain(["安置补助", "地上附着物和青苗补偿", "拆迁补偿"])
+      };
+    }
+
+    async function pendingMunicipalTransferBreakdown() {
+      const df = await transferPendingByLevel("市级");
+      if (!df.length) return {};
+      return {
+        "总额": roundWan(sumYuan(df, "拨款金额")),
+        "一般公共": roundWan(sumYuan(df.filter(row => row["资金性质"] === "111-一般公共预算资金"), "拨款金额")),
+        "政府性基金": roundWan(sumYuan(df.filter(row => row["资金性质"] === "121-政府性基金预算资金"), "拨款金额")),
+        "项目": projectDictFromYuan(groupSumYuan(df, "项目名称", "拨款金额"))
+      };
+    }
+
+    async function buildReport() {
+      return {
+        "一、支出情况": {
+          "1 三保资金（万元）": await calcSanbaoExpense(),
+          "2 上年结转上级资金-总额（万元）": await lastYearCarryTotal(),
+          "2 上年结转上级资金（项目明细）": await lastYearCarryExpense(),
+          "3 当年度上级资金-总额（万元）": await currentYearUpperTotal(),
+          "3 当年度上级资金（项目明细）": await currentYearUpperExpense(),
+          "4 市级资金-总额（万元）": await municipalTotal(),
+          "4 市级资金（项目明细）": await municipalExpense(),
+          "5 一般债券资金-总额（万元）": await generalBondTotal(),
+          "5 一般债券资金（项目明细）": await generalBondExpense(),
+          "6 专项债券资金-总额（万元）": await specialBondTotal(),
+          "6 专项债券资金（项目明细）": await specialBondExpense()
+        },
+        "二、待拨付情况": {
+          "1 待拨付总额（万元）": await pendingTotal(),
+          "2 三保资金（万元）": await pendingSanbao(),
+          "3 上级资金（万元）": await pendingUpper(),
+          "4 上年结转上级资金-总额（万元）": await pendingLastYearTotal(),
+          "4 上年结转上级资金（项目明细）": await pendingLastYearCarry(),
+          "5 当年度上级资金-总额（万元）": await pendingCurrentUpperTotal(),
+          "5 当年度上级资金（项目明细）": await pendingCurrentUpper(),
+          "6 一般债券资金-总额（万元）": await pendingBondTotal("一般债券", "112-一般债券"),
+          "6 一般债券资金（项目明细）": await pendingBond("一般债券", "112-一般债券"),
+          "7 专项债券资金-总额（万元）": await pendingBondTotal("专项债券", "122-专项债券"),
+          "7 专项债券资金（项目明细）": await pendingBond("专项债券", "122-专项债券"),
+          "8 市级资金细分（万元）": await pendingMunicipalBreakdown(),
+          "9 市级资金（实拨）（万元）": await pendingMunicipalTransferBreakdown()
+        }
+      };
+    }
+
+    function cleanZero(obj) {
+      if (Array.isArray(obj)) return obj.map(cleanZero).filter(v => v !== null && v !== undefined);
+      if (obj && typeof obj === "object") {
+        const out = {};
+        for (const [key, value] of Object.entries(obj)) {
+          if (value === null || value === undefined) continue;
+          const cleaned = cleanZero(value);
+          if (typeof cleaned === "number" && cleaned <= 0) continue;
+          out[key] = cleaned;
+        }
+        return out;
+      }
+      return obj;
+    }
+
+    function cleanBelow20(obj) {
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+      const result = {};
+      for (const [sectionName, sectionContent] of Object.entries(obj)) {
+        if (!sectionContent || typeof sectionContent !== "object" || Array.isArray(sectionContent)) {
+          result[sectionName] = sectionContent;
+          continue;
+        }
+        const remove = new Set();
+        for (const [key, value] of Object.entries(sectionContent)) {
+          if (key.includes("-总额（万元）") && typeof value === "number" && value < 20) {
+            const prefix = key.split("-总额（万元）")[0];
+            remove.add(key);
+            remove.add(`${prefix}（项目明细）`);
+          }
+        }
+        result[sectionName] = Object.fromEntries(Object.entries(sectionContent).filter(([key]) => !remove.has(key)));
+      }
+      return result;
+    }
+
+    function shouldShowMainly(series, total) {
+      return series && Object.keys(series).length > 0 && Object.values(series).reduce((a, b) => a + b, 0) !== total;
+    }
+
+    function projectName(name) {
+      return String(name).split(/-(.*)/s)[1] || String(name);
+    }
+
+    function top(series, compact = false) {
+      return Object.entries(series || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100)
+        .map(([k, v]) => compact ? `${projectName(k)}${v}万元` : `${projectName(k)} ${v} 万元`)
+        .join("，");
+    }
+
+    function seqChar(seq) {
+      return ["一", "二", "三", "四", "五"][seq - 1] || "五";
+    }
+
+    function generateNarrative(d) {
+      const dateStr = reportDateStr();
+      const exp = d["一、支出情况"] || {};
+      const sanbao = Math.max(exp["1 三保资金（万元）"] || 0, 0);
+      const lastUp = Math.max(exp["2 上年结转上级资金-总额（万元）"] || 0, 0);
+      const currUp = Math.max(exp["3 当年度上级资金-总额（万元）"] || 0, 0);
+      const municipal = Math.max(exp["4 市级资金-总额（万元）"] || 0, 0);
+      const bond = Math.max(exp["5 一般债券资金-总额（万元）"] || 0, 0);
+      const specialBond = Math.max(exp["6 专项债券资金-总额（万元）"] || 0, 0);
+      const upperTotal = lastUp + currUp;
+      const totalSpent = sanbao + upperTotal + municipal + bond + specialBond;
+      const lines = ["三、支出情况", `${dateStr}财政复核已审银行已支出${totalSpent}万元：`];
+      let seq = 0;
+
+      if (sanbao > 0) {
+        seq += 1;
+        lines.push(`${seqChar(seq)}是三保资金 ${sanbao} 万元；`);
+      }
+      if (upperTotal > 0) {
+        seq += 1;
+        const subItems = [];
+        if (lastUp > 0) {
+          const details = exp["2 上年结转上级资金（项目明细）"] || {};
+          subItems.push(["上年结转上级资金", lastUp, details, shouldShowMainly(details, lastUp)]);
+        }
+        if (currUp > 0) {
+          const details = exp["3 当年度上级资金（项目明细）"] || {};
+          subItems.push(["当年度上级资金", currUp, details, shouldShowMainly(details, currUp)]);
+        }
+        if (subItems.length === 1) {
+          const [name, amount, details, showMainly] = subItems[0];
+          let detailText = "";
+          if (Object.keys(details).length) detailText = showMainly ? `，主要为：${top(details, true)}` : `：${top(details, true)}`;
+          lines.push(`${seqChar(seq)}是上级资金${upperTotal}万元，为${name}${amount}万元${detailText}`);
+        } else {
+          const text = subItems.map(([name, amount, details, showMainly], idx) => {
+            let detailText = "";
+            if (Object.keys(details).length) detailText = showMainly ? `，主要为：${top(details)}` : `：${top(details)}`;
+            return `${idx + 1}. ${name} ${amount} 万元${detailText}`;
+          }).join("；");
+          lines.push(`${seqChar(seq)}是上级资金 ${upperTotal} 万元：${text}；`);
+        }
+      }
+      for (const [label, amount, detailKey] of [
+        ["市级资金", municipal, "4 市级资金（项目明细）"],
+        ["一般债券资金", bond, "5 一般债券资金（项目明细）"],
+        ["专项债券资金", specialBond, "6 专项债券资金（项目明细）"]
+      ]) {
+        if (amount <= 0) continue;
+        seq += 1;
+        const details = exp[detailKey] || {};
+        const detailText = shouldShowMainly(details, amount) && Object.keys(details).length
+          ? `，主要为：${top(details)}`
+          : Object.keys(details).length ? `：${top(details)}` : "";
+        lines.push(`${seqChar(seq)}是${label} ${amount} 万元${detailText}；`);
+      }
+
+      lines.push("四、待拨付情况");
+      const pend = d["二、待拨付情况"] || {};
+      const totalP = pend["1 待拨付总额（万元）"] || 0;
+      if (totalP > 0) lines.push(`截至 ${dateStr} 待拨付资金 ${totalP} 万元`);
+      let pendingSeq = 0;
+      const pendingChars = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+      const nextPendingSeq = () => pendingChars[pendingSeq++] || String(pendingSeq);
+
+      const sanbaoP = pend["2 三保资金（万元）"] || 0;
+      if (sanbaoP > 0) lines.push(`（${nextPendingSeq()}）三保资金 ${sanbaoP} 万元`);
+
+      const upperTotalP = pend["3 上级资金（万元）"] || 0;
+      if (upperTotalP > 0) {
+        lines.push(`（${nextPendingSeq()}）上级资金 ${upperTotalP} 万元`);
+        const subItems = [];
+        const lastPTotal = pend["4 上年结转上级资金-总额（万元）"] || 0;
+        const currPTotal = pend["5 当年度上级资金-总额（万元）"] || 0;
+        if (lastPTotal > 0) {
+          const details = pend["4 上年结转上级资金（项目明细）"] || {};
+          subItems.push(["上年结转上级资金", lastPTotal, details, shouldShowMainly(details, lastPTotal)]);
+        }
+        if (currPTotal > 0) {
+          const details = pend["5 当年度上级资金（项目明细）"] || {};
+          subItems.push(["当年度上级资金", currPTotal, details, shouldShowMainly(details, currPTotal)]);
+        }
+        subItems.forEach(([name, amount, details, showMainly], idx) => {
+          let detailText = "";
+          if (Object.keys(details).length) detailText = showMainly ? `，主要为：${top(details)}` : `：${top(details)}`;
+          const prefix = subItems.length > 1 ? `${idx + 1}. ` : "";
+          lines.push(`${prefix}${name} ${amount} 万元${detailText}；`);
+        });
+      }
+
+      for (const [label, amountKey, detailKey] of [
+        ["一般债券资金", "6 一般债券资金-总额（万元）", "6 一般债券资金（项目明细）"],
+        ["专项债券资金", "7 专项债券资金-总额（万元）", "7 专项债券资金（项目明细）"]
+      ]) {
+        const amount = pend[amountKey] || 0;
+        const details = pend[detailKey] || {};
+        if (amount > 0) {
+          const detailText = shouldShowMainly(details, amount) && Object.keys(details).length
+            ? `，主要为：${top(details)}`
+            : Object.keys(details).length ? `：${top(details)}` : "";
+          lines.push(`（${nextPendingSeq()}）${label} ${amount} 万元${detailText}；`);
+        }
+      }
+
+      const municipalP = pend["8 市级资金细分（万元）"] || {};
+      if ((municipalP["总额"] || 0) > 0) {
+        lines.push(`（${nextPendingSeq()}）市级资金 ${municipalP["总额"]} 万元（一般公共预算 ${municipalP["一般公共"] || 0} 万元、政府性基金 ${municipalP["政府性基金"] || 0} 万元），其中人员类支出 ${municipalP["人员类"] || 0} 万元，运转类支出 ${municipalP["运转类"] || 0} 万元，委托第三方服务及采购类支出 ${municipalP["委托及采购"] || 0} 万元，基建类支出 ${municipalP["基建类"] || 0} 万元，征地类支出 ${municipalP["征地类"] || 0} 万元。`);
+      }
+
+      const municipalTransfer = pend["9 市级资金（实拨）（万元）"] || {};
+      if ((municipalTransfer["总额"] || 0) > 0) {
+        const projects = municipalTransfer["项目"] || {};
+        lines.push(`（${nextPendingSeq()}）市级资金（实拨）${municipalTransfer["总额"]}万元（一般公共预算资金 ${municipalTransfer["一般公共"] || 0}万元、政府性基金${municipalTransfer["政府性基金"] || 0}万元）${Object.keys(projects).length ? `，主要为：${top(projects, true)}` : ""}；`);
+      }
+      return lines.join("\n");
+    }
+
+    function formatDict(obj) {
+      return JSON.stringify(obj, null, 2).replace(/":/g, "':").replace(/"/g, "'");
+    }
+
+    function missingFiles() {
+      return REQUIRED_FILES.filter(name => {
+        if (name.includes("*")) {
+          const prefix = name.split("*")[0];
+          return ![...selectedFiles.keys()].some(fileName => fileName.startsWith(prefix) && fileName.endsWith(".xlsx"));
+        }
+        return !selectedFiles.has(name);
+      });
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function makeNextDayZip() {
+      if (!window.JSZip) throw new Error("JSZip 未加载，无法生成压缩包。");
+      const zip = new JSZip();
+      const now = new Date();
+      now.setDate(now.getDate() + 1);
+      const folderName = `${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+      const folder = zip.folder(folderName);
+      const copied = [];
+      for (const [src, dst] of Object.entries(NEXT_DAY_RENAME_MAP)) {
+        const file = selectedFiles.get(src);
+        if (!file) continue;
+        folder.file(dst, await file.arrayBuffer());
+        copied.push(`${src} -> ${dst}`);
+      }
+      folder.file("使用说明.txt", [
+        "明日延续包使用说明",
+        "1. 将本压缩包解压到明天日期目录。",
+        "2. 压缩包内已把今天的“已审未支付”文件改名为明天需要的“昨天已审未支付”文件。",
+        "3. 第二天只需要再补充当天新导出的“已支付”“已审未支付”“待拨付情况”“实拨”文件。",
+        "",
+        "本次已复制：",
+        ...(copied.length ? copied : ["没有找到可复制的“已审未支付”文件。"])
+      ].join("\n"));
+      return zip.generateAsync({ type: "blob" });
+    }
+
+    async function calculate() {
+      if (!window.XLSX) {
+        setState("Excel 解析库未加载", "bad");
+        return;
+      }
+      if (!selectedFiles.size) {
+        setState("请先选择 Excel 文件", "warn");
+        return;
+      }
+      calcBtn.disabled = true;
+      setState("正在计算", "warn");
+      try {
+        const report = await buildReport();
+        const cleaned = cleanBelow20(cleanZero(report));
+        latestSummary = generateNarrative(cleaned);
+        const missing = missingFiles();
+        latestOutput = `${formatDict(report)}\n\n${latestSummary}${missing.length ? `\n\n未上传或未识别文件：\n${missing.map(x => `- ${x}`).join("\n")}` : ""}\n`;
+        summaryText.textContent = latestSummary;
+        outputText.textContent = latestOutput;
+        resultPanel.classList.remove("hidden");
+        detailPanel.classList.remove("hidden");
+        setState("计算完成", "ok");
+      } catch (error) {
+        latestSummary = "";
+        latestOutput = error && error.stack ? error.stack : String(error);
+        outputText.textContent = latestOutput;
+        detailPanel.classList.remove("hidden");
+        setState("计算失败", "bad");
+      } finally {
+        calcBtn.disabled = false;
+      }
+    }
+
+    fileInput.addEventListener("change", event => addFiles(event.target.files));
+    clearBtn.addEventListener("click", () => {
+      selectedFiles.clear();
+      workbookCache.clear();
+      fileInput.value = "";
+      uploadedFiles.innerHTML = "";
+      resultPanel.classList.add("hidden");
+      detailPanel.classList.add("hidden");
+      setState("等待上传");
+    });
+    calcBtn.addEventListener("click", calculate);
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      drop.addEventListener(eventName, event => {
+        event.preventDefault();
+        drop.classList.add("dragover");
+      });
+    }
+    for (const eventName of ["dragleave", "drop"]) {
+      drop.addEventListener(eventName, event => {
+        event.preventDefault();
+        drop.classList.remove("dragover");
+      });
+    }
+    drop.addEventListener("drop", event => addFiles(event.dataTransfer.files));
+
+    copySummaryBtn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(latestSummary);
+      setState("总结已复制", "ok");
+    });
+    downloadSummaryBtn.addEventListener("click", () => {
+      downloadBlob(new Blob([latestSummary + "\n"], { type: "text/plain;charset=utf-8" }), "总结输出.txt");
+    });
+    downloadOutputBtn.addEventListener("click", () => {
+      downloadBlob(new Blob([latestOutput + "\n"], { type: "text/plain;charset=utf-8" }), "输出结果.txt");
+    });
+    downloadZipBtn.addEventListener("click", async () => {
+      try {
+        const blob = await makeNextDayZip();
+        downloadBlob(blob, "明日延续包.zip");
+      } catch (error) {
+        setState(error.message || "压缩包生成失败", "bad");
+      }
+    });
+  </script>
+</body>
+</html>
